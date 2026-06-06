@@ -1,0 +1,90 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    /* Light theme */
+    --surface: #ffffff;
+    --surface-secondary: #f5f5f4;
+    --surface-border: #e7e5e4;
+    --brand: #0a84ff;
+    --brand-hover: #0070e0;
+    --brand-muted: #dbeafe;
+    --text-primary: #1c1917;
+    --text-secondary: #44403c;
+    --text-muted: #78716c;
+
+    --sidebar-bg: #fafaf9;
+    --chat-user-bg: #0a84ff;
+    --chat-ai-bg: #f5f5f4;
+    --sql-bg: #1e1e2e;
+    --scrollbar-thumb: #d6d3d1;
+  }
+
+  .dark {
+    --surface: #0f0f0f;
+    --surface-secondary: #1a1a1a;
+    --surface-border: #2a2a2a;
+    --brand: #3b82f6;
+    --brand-hover: #60a5fa;
+    --brand-muted: #1e3a5f;
+    --text-primary: #fafaf9;
+    --text-secondary: #d6d3d1;
+    --text-muted: #78716c;
+
+    --sidebar-bg: #111111;
+    --chat-user-bg: #2563eb;
+    --chat-ai-bg: #1a1a1a;
+    --sql-bg: #0d1117;
+    --scrollbar-thumb: #374151;
+  }
+
+  * {
+    scrollbar-width: thin;
+    scrollbar-color: var(--scrollbar-thumb) transparent;
+  }
+
+  *::-webkit-scrollbar {
+    width: 6px;
+    height: 6px;
+  }
+
+  *::-webkit-scrollbar-track {
+    background: transparent;
+  }
+
+  *::-webkit-scrollbar-thumb {
+    background-color: var(--scrollbar-thumb);
+    border-radius: 3px;
+  }
+
+  body {
+    font-family: 'IBM Plex Sans', system-ui, sans-serif;
+    background: var(--surface);
+    color: var(--text-primary);
+    -webkit-font-smoothing: antialiased;
+  }
+}
+
+@layer components {
+  .btn-primary {
+    @apply bg-[var(--brand)] hover:bg-[var(--brand-hover)] text-white font-medium px-4 py-2 rounded-lg transition-colors duration-150 disabled:opacity-50 disabled:cursor-not-allowed;
+  }
+
+  .input-base {
+    @apply bg-[var(--surface-secondary)] border border-[var(--surface-border)] text-[var(--text-primary)] rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-[var(--brand)] transition-all;
+  }
+
+  .card {
+    @apply bg-[var(--surface)] border border-[var(--surface-border)] rounded-xl;
+  }
+
+  .thinking-dot {
+    @apply w-2 h-2 rounded-full bg-[var(--text-muted)];
+    animation: pulseDot 1.4s ease-in-out infinite;
+  }
+
+  .thinking-dot:nth-child(2) { animation-delay: 0.2s; }
+  .thinking-dot:nth-child(3) { animation-delay: 0.4s; }
+}
