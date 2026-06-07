@@ -1,10 +1,11 @@
 from fastapi import APIRouter, Depends, HTTPException
+from fastapi.responses import StreamingResponse
 from sqlalchemy.orm import Session
 import structlog
 
 from app.core.database import get_db
 from app.models.schemas import QueryRequest, QueryResponse, ErrorResponse
-from app.services.query_service import execute_query_pipeline
+from app.services.query_service import execute_query_pipeline, stream_query_pipeline
 
 logger = structlog.get_logger()
 router = APIRouter(prefix="/query", tags=["query"])
@@ -37,3 +38,29 @@ async def run_query(request: QueryRequest, db: Session = Depends(get_db)):
     except Exception as e:
         logger.error("Unexpected query error", error=str(e))
         raise HTTPException(status_code=500, detail="An unexpected error occurred")
+
+
+@router.post("/stream/")
+async def run_query_stream(request: QueryRequest, db: Session = Depends(get_db)):
+    """
+    Same as POST /query/ but streams progress events via Server-Sent Events.
+    Events: status | sql | result | done | error
+    """
+    logger.info(
+        "Stream query received",
+        question=request.question[:100],
+        provider=request.model_provider,
+    )
+
+    async def generator():
+        async for chunk in stream_query_pipeline(request, db):
+            yield chunk
+
+    return StreamingResponse(
+        generator(),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            "X-Accel-Buffering": "no",
+        },
+    )

@@ -1,5 +1,6 @@
 import json
 import re
+import asyncio
 from typing import List, Tuple, Optional
 import anthropic
 import openai
@@ -10,6 +11,25 @@ from app.models.schemas import Message, ModelProvider, ChartRecommendation, Char
 from app.utils.sql_validator import extract_sql_from_response
 
 logger = structlog.get_logger()
+
+# Module-level singleton clients — created once, reused across requests
+_anthropic_client: Optional[anthropic.Anthropic] = None
+_openai_client: Optional[openai.OpenAI] = None
+
+
+def _get_anthropic() -> anthropic.Anthropic:
+    global _anthropic_client
+    if _anthropic_client is None:
+        _anthropic_client = anthropic.Anthropic(api_key=settings.ANTHROPIC_API_KEY)
+    return _anthropic_client
+
+
+def _get_openai() -> openai.OpenAI:
+    global _openai_client
+    if _openai_client is None:
+        _openai_client = openai.OpenAI(api_key=settings.OPENAI_API_KEY)
+    return _openai_client
+
 
 SYSTEM_PROMPT = """You are an expert SQL assistant. Your job is to convert natural language questions into accurate, efficient SQL SELECT queries.
 
@@ -59,7 +79,7 @@ def _build_messages(
     messages.append({"role": "assistant", "content": '{"acknowledged": "Schema received. Ready to help."}'})
 
     # Conversation history
-    for msg in conversation_history[-10:]:  # Keep last 10 for context window
+    for msg in conversation_history[-10:]:
         messages.append({"role": msg.role, "content": msg.content})
 
     # Current question
@@ -82,7 +102,6 @@ def _parse_ai_response(raw: str) -> dict:
     try:
         return json.loads(text)
     except json.JSONDecodeError:
-        # Try to extract JSON object
         match = re.search(r"\{.*\}", text, re.DOTALL)
         if match:
             return json.loads(match.group())
@@ -95,16 +114,19 @@ async def generate_sql_anthropic(
     conversation_history: List[Message],
     error_feedback: Optional[str] = None,
 ) -> dict:
-    client = anthropic.Anthropic(api_key=settings.ANTHROPIC_API_KEY)
+    client = _get_anthropic()
     messages = _build_messages(question, schema_text, conversation_history, error_feedback)
 
-    response = client.messages.create(
-        model="claude-sonnet-4-20250514",
-        max_tokens=2048,
-        system=SYSTEM_PROMPT,
-        messages=messages,
-    )
+    def _sync_call():
+        return client.messages.create(
+            model=settings.ANTHROPIC_MODEL,
+            max_tokens=2048,
+            system=SYSTEM_PROMPT,
+            messages=messages,
+        )
 
+    # Run sync SDK call in a thread pool so the event loop stays free for SSE streaming
+    response = await asyncio.to_thread(_sync_call)
     raw = response.content[0].text
     return _parse_ai_response(raw)
 
@@ -115,17 +137,19 @@ async def generate_sql_openai(
     conversation_history: List[Message],
     error_feedback: Optional[str] = None,
 ) -> dict:
-    client = openai.OpenAI(api_key=settings.OPENAI_API_KEY)
-    messages = [{"role": "system", "content": SYSTEM_PROMPT}]
-    messages += _build_messages(question, schema_text, conversation_history, error_feedback)
+    client = _get_openai()
+    messages_list = [{"role": "system", "content": SYSTEM_PROMPT}]
+    messages_list += _build_messages(question, schema_text, conversation_history, error_feedback)
 
-    response = client.chat.completions.create(
-        model="gpt-4o",
-        max_tokens=2048,
-        messages=messages,
-        response_format={"type": "json_object"},
-    )
+    def _sync_call():
+        return client.chat.completions.create(
+            model=settings.OPENAI_MODEL,
+            max_tokens=2048,
+            messages=messages_list,
+            response_format={"type": "json_object"},
+        )
 
+    response = await asyncio.to_thread(_sync_call)
     raw = response.choices[0].message.content
     return _parse_ai_response(raw)
 
@@ -143,10 +167,10 @@ async def generate_sql(
     """
     if provider == ModelProvider.ANTHROPIC:
         result = await generate_sql_anthropic(question, schema_text, conversation_history, error_feedback)
-        model_used = "claude-sonnet-4-20250514"
+        model_used = settings.ANTHROPIC_MODEL
     else:
         result = await generate_sql_openai(question, schema_text, conversation_history, error_feedback)
-        model_used = "gpt-4o"
+        model_used = settings.OPENAI_MODEL
 
     return result, model_used
 

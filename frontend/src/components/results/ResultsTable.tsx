@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { ChevronLeft, ChevronRight, TableIcon } from 'lucide-react';
+import { ChevronLeft, ChevronRight, TableIcon, Download, AlertTriangle } from 'lucide-react';
 
 interface ResultsTableProps {
   columns: string[];
@@ -9,6 +9,7 @@ interface ResultsTableProps {
 }
 
 const PAGE_SIZE = 25;
+const ROW_LIMIT = 100;
 
 export function ResultsTable({ columns, rows, rowCount, executionTimeMs }: ResultsTableProps) {
   const [page, setPage] = useState(0);
@@ -16,6 +17,23 @@ export function ResultsTable({ columns, rows, rowCount, executionTimeMs }: Resul
   const pageRows = rows.slice(page * PAGE_SIZE, (page + 1) * PAGE_SIZE);
 
   if (columns.length === 0) return null;
+
+  const exportCSV = () => {
+    const escape = (cell: string | number | boolean | null): string => {
+      if (cell === null) return '';
+      const s = String(cell);
+      return s.includes(',') || s.includes('"') || s.includes('\n')
+        ? `"${s.replace(/"/g, '""')}"`
+        : s;
+    };
+    const csv = [columns.join(','), ...rows.map(r => r.map(escape).join(','))].join('\n');
+    downloadBlob(new Blob([csv], { type: 'text/csv' }), 'results.csv');
+  };
+
+  const exportJSON = () => {
+    const data = rows.map(row => Object.fromEntries(columns.map((col, i) => [col, row[i]])));
+    downloadBlob(new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' }), 'results.json');
+  };
 
   return (
     <div className="mt-3 rounded-xl border border-[var(--surface-border)] overflow-hidden animate-fade-in">
@@ -27,26 +45,54 @@ export function ResultsTable({ columns, rows, rowCount, executionTimeMs }: Resul
           <span className="text-[var(--text-muted)]">·</span>
           <span className="text-[var(--text-muted)]">{executionTimeMs.toFixed(0)}ms</span>
         </div>
-        {totalPages > 1 && (
-          <div className="flex items-center gap-1 text-xs text-[var(--text-muted)]">
-            <button
-              onClick={() => setPage(p => Math.max(0, p - 1))}
-              disabled={page === 0}
-              className="p-1 rounded hover:bg-[var(--surface)] disabled:opacity-30 transition-colors"
-            >
-              <ChevronLeft size={14} />
-            </button>
-            <span>{page + 1} / {totalPages}</span>
-            <button
-              onClick={() => setPage(p => Math.min(totalPages - 1, p + 1))}
-              disabled={page === totalPages - 1}
-              className="p-1 rounded hover:bg-[var(--surface)] disabled:opacity-30 transition-colors"
-            >
-              <ChevronRight size={14} />
-            </button>
-          </div>
-        )}
+        <div className="flex items-center gap-2">
+          {/* Export buttons */}
+          <button
+            onClick={exportCSV}
+            title="Export as CSV"
+            className="flex items-center gap-1 text-xs text-[var(--text-muted)] hover:text-[var(--text-primary)] px-2 py-1 rounded hover:bg-[var(--surface)] transition-colors"
+          >
+            <Download size={12} />
+            CSV
+          </button>
+          <button
+            onClick={exportJSON}
+            title="Export as JSON"
+            className="flex items-center gap-1 text-xs text-[var(--text-muted)] hover:text-[var(--text-primary)] px-2 py-1 rounded hover:bg-[var(--surface)] transition-colors"
+          >
+            <Download size={12} />
+            JSON
+          </button>
+
+          {totalPages > 1 && (
+            <div className="flex items-center gap-1 text-xs text-[var(--text-muted)]">
+              <button
+                onClick={() => setPage(p => Math.max(0, p - 1))}
+                disabled={page === 0}
+                className="p-1 rounded hover:bg-[var(--surface)] disabled:opacity-30 transition-colors"
+              >
+                <ChevronLeft size={14} />
+              </button>
+              <span>{page + 1} / {totalPages}</span>
+              <button
+                onClick={() => setPage(p => Math.min(totalPages - 1, p + 1))}
+                disabled={page === totalPages - 1}
+                className="p-1 rounded hover:bg-[var(--surface)] disabled:opacity-30 transition-colors"
+              >
+                <ChevronRight size={14} />
+              </button>
+            </div>
+          )}
+        </div>
       </div>
+
+      {/* Row limit warning */}
+      {rowCount >= ROW_LIMIT && (
+        <div className="flex items-center gap-2 px-4 py-2 bg-amber-50 dark:bg-amber-950/20 border-b border-amber-200 dark:border-amber-800 text-xs text-amber-700 dark:text-amber-400">
+          <AlertTriangle size={12} className="flex-shrink-0" />
+          Results are limited to {ROW_LIMIT} rows. Refine your question or add a smaller LIMIT to see different data.
+        </div>
+      )}
 
       {/* Table */}
       <div className="overflow-x-auto max-h-80">
@@ -91,4 +137,13 @@ export function ResultsTable({ columns, rows, rowCount, executionTimeMs }: Resul
       </div>
     </div>
   );
+}
+
+function downloadBlob(blob: Blob, filename: string) {
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = filename;
+  a.click();
+  URL.revokeObjectURL(url);
 }

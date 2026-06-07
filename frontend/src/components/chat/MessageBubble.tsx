@@ -47,6 +47,13 @@ export function MessageBubble({ message }: MessageBubbleProps) {
           </div>
         )}
 
+        {/* SQL shown immediately during streaming, before full results arrive */}
+        {message.partialSql && !queryResponse && (
+          <div className="w-full max-w-3xl">
+            <SqlBlock sql={message.partialSql} />
+          </div>
+        )}
+
         {/* Query response */}
         {queryResponse && (
           <div className="w-full max-w-3xl">

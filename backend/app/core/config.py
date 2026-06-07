@@ -15,6 +15,13 @@ class Settings(BaseSettings):
     SECRET_KEY: str = "change-me-in-production"
     ALLOWED_ORIGINS: str = "http://localhost:5173,http://localhost:3000"
 
+    # AI model IDs (override via .env to upgrade without code changes)
+    ANTHROPIC_MODEL: str = "claude-sonnet-4-20250514"
+    OPENAI_MODEL: str = "gpt-4o"
+
+    # Schema cache TTL in seconds
+    SCHEMA_CACHE_TTL: int = 60
+
     # Rate limiting
     RATE_LIMIT_PER_MINUTE: int = 20
 

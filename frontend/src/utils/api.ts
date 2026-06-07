@@ -6,6 +6,7 @@ import type {
   Message,
   ModelProvider,
   HealthStatus,
+  StreamEvent,
 } from '../types';
 
 const api = axios.create({
@@ -27,6 +28,56 @@ export async function runQuery(
     session_id: sessionId,
   });
   return data;
+}
+
+export async function runQueryStream(
+  question: string,
+  provider: ModelProvider,
+  conversationHistory: Message[],
+  sessionId: string | undefined,
+  onEvent: (event: StreamEvent) => void,
+  signal?: AbortSignal,
+): Promise<void> {
+  const response = await fetch('/api/v1/query/stream/', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      question,
+      model_provider: provider,
+      conversation_history: conversationHistory,
+      session_id: sessionId,
+    }),
+    signal,
+  });
+
+  if (!response.ok) {
+    const err = await response.json().catch(() => ({ detail: 'Request failed' }));
+    throw new Error(err.detail || 'Request failed');
+  }
+
+  const reader = response.body!.getReader();
+  const decoder = new TextDecoder();
+  let buffer = '';
+
+  while (true) {
+    const { value, done } = await reader.read();
+    if (done) break;
+
+    buffer += decoder.decode(value, { stream: true });
+    const lines = buffer.split('\n');
+    buffer = lines.pop() ?? '';
+
+    for (const line of lines) {
+      if (line.startsWith('data: ')) {
+        try {
+          const event = JSON.parse(line.slice(6)) as StreamEvent;
+          onEvent(event);
+        } catch {
+          // ignore malformed SSE lines
+        }
+      }
+    }
+  }
 }
 
 export async function getSchema(): Promise<SchemaResponse> {

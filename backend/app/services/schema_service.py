@@ -1,21 +1,41 @@
+import time
+from threading import Lock
 from sqlalchemy import inspect, text
 from sqlalchemy.orm import Session
-from typing import List, Dict, Any
+from typing import List, Dict
+from app.core.config import settings
 from app.models.schemas import TableSchema, ColumnInfo
 import structlog
 
 logger = structlog.get_logger()
 
+_cache_lock = Lock()
+_schema_cache: Dict = {"data": None, "ts": 0.0}
+
 
 def get_schema(db: Session) -> List[TableSchema]:
-    """Extract full schema from the connected PostgreSQL database."""
+    """Extract full schema from the connected PostgreSQL database, cached for SCHEMA_CACHE_TTL seconds."""
+    with _cache_lock:
+        now = time.time()
+        if _schema_cache["data"] is not None and now - _schema_cache["ts"] < settings.SCHEMA_CACHE_TTL:
+            return _schema_cache["data"]
+
+    result = _fetch_schema(db)
+
+    with _cache_lock:
+        _schema_cache["data"] = result
+        _schema_cache["ts"] = time.time()
+
+    return result
+
+
+def _fetch_schema(db: Session) -> List[TableSchema]:
     inspector = inspect(db.bind)
     tables = []
 
     table_names = inspector.get_table_names(schema="public")
 
     for table_name in table_names:
-        # Skip internal/system tables
         if table_name.startswith("_") or table_name in ("query_logs", "alembic_version"):
             continue
 
@@ -24,7 +44,6 @@ def get_schema(db: Session) -> List[TableSchema]:
         pk_columns = set(pk_constraint.get("constrained_columns", []))
         fk_list = inspector.get_foreign_keys(table_name, schema="public")
 
-        # Build FK map
         fk_map: Dict[str, List[str]] = {}
         for fk in fk_list:
             for col in fk["constrained_columns"]:
@@ -42,10 +61,9 @@ def get_schema(db: Session) -> List[TableSchema]:
             for col in columns_info
         ]
 
-        # Get approximate row count
         try:
             result = db.execute(
-                text(f"SELECT reltuples::BIGINT FROM pg_class WHERE relname = :tname"),
+                text("SELECT reltuples::BIGINT FROM pg_class WHERE relname = :tname"),
                 {"tname": table_name},
             ).scalar()
             row_count = int(result) if result is not None else None

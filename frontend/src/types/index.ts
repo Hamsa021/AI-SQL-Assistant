@@ -64,9 +64,17 @@ export interface ChatMessage {
   role: 'user' | 'assistant';
   content: string;
   queryResponse?: QueryResponse;
+  partialSql?: string;
   error?: string;
   timestamp: Date;
 }
+
+export type StreamEvent =
+  | { type: 'status'; message: string }
+  | { type: 'sql'; sql: string; explanation: string }
+  | { type: 'result'; columns: string[]; rows: (string | number | boolean | null)[][]; row_count: number; chart_recommendation: ChartRecommendation; execution_time_ms: number }
+  | { type: 'done'; session_id: string; model_used: string; retries: number }
+  | { type: 'error'; message: string };
 
 export interface HealthStatus {
   status: string;

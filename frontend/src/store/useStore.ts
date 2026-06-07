@@ -19,6 +19,7 @@ interface AppState {
   // Chat messages
   messages: ChatMessage[];
   addMessage: (msg: Omit<ChatMessage, 'id' | 'timestamp'>) => void;
+  updateLastMessage: (updates: Partial<Omit<ChatMessage, 'id' | 'timestamp'>>) => void;
   clearMessages: () => void;
 
   // Sidebar history
@@ -34,7 +35,7 @@ interface AppState {
 
 export const useStore = create<AppState>()(
   persist(
-    (set, get) => ({
+    (set) => ({
       darkMode: false,
       toggleDarkMode: () => set(s => ({ darkMode: !s.darkMode })),
 
@@ -52,6 +53,13 @@ export const useStore = create<AppState>()(
             { ...msg, id: uuidv4(), timestamp: new Date() },
           ],
         })),
+      updateLastMessage: (updates) =>
+        set(s => {
+          if (s.messages.length === 0) return s;
+          const messages = [...s.messages];
+          messages[messages.length - 1] = { ...messages[messages.length - 1], ...updates };
+          return { messages };
+        }),
       clearMessages: () => set({ messages: [], sessionId: uuidv4() }),
 
       history: [],
